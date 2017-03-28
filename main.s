@@ -1,5 +1,3 @@
-.include "syscall.s"
-
 .section .rodata
 	PromptMessage:
 		.ascii "Enter expression ('q' to exit):"
@@ -12,9 +10,32 @@
 .text
 .globl _start
 _start:
-	syswrite $PromptMessage, $PromptMessageSize
-	sysread $InputBuffer, $InputBufferSize
-	mov %rax, %rcx
+	mov $1, %rax			# call write
+	mov $1, %rdi			# fd = STD_OUT
+	mov $PromptMessage, %rsi 	# *buf = PromptMessage
+	mov $PromptMessageSize, %rdx	# count = PromptMessageSize
+	syscall
+	
+	xor %rax, %rax			# call read
+	xor %rdi, %rdi			# fd = STD_IN
+	mov $InputBuffer, %rsi		# *buf = InputBuffer
+	mov $InputBufferSize, %rdx	# count = InputBufferSize
+	syscall
+
+	mov %rax, %rbx	# %rbx = count of readed bytes (%rax)
+	
+	# allocate memory with size of readed bytes*8 to store parsed value
+	mov $0x9, %rax  # call mmap
+	xor %rdi, %rdi  # addr = NULL
+	mov %rbx, %rsi  # len = count of readed bytes 
+	imul $0x8, %rsi # len = len * 8 (8 is register size in bytes)
+	mov $0x3, %rdx  # prot = PROT_READ|PROT_WRITE
+	mov $0x22, %r10 # flags = MAP_ANONYMOUS|MAP_PRIVATE
+	mov $-1, %r8    # fd = -1
+	xor %r9,  %r9	# off = 0
+	syscall
+	
+	mov %rbx, %rcx
 	xor %rdx, %rdx
 	xor %rbx, %rbx
 
@@ -22,7 +43,7 @@ l_convexpr:
 	mov InputBuffer(,%rdx), %bl
 	
 	cmp $0x0a, %bl # if char == '\n'
-	je l_exit
+	je _exit
 	
 	cmp $0x20, %bl # if char == ' '
 	je l_convexpr_skip
@@ -42,20 +63,28 @@ l_convexpr:
 
 l_convexpr_opr:
 	# if char == '+'
+	#cmp $0x6b, %bl
 	# if char == '-'
+	#cmp $0x6d, %bl
 	# if char == '*'
+	#cmp $0x6a, %bl
 	# if char == '/'
+	#cmp $0x6f, %bl
 	add $0x01, %rdx
 	loop l_convexpr
 
+l_convexpr_bracket:
+	# if char == '('
+	# 
 l_convexpr_skip:
 	add $0x01, %rdx
 	loop l_convexpr
 
 
-l_exit:
-	sysexit
-
+_exit:
+	mov $60, %rax
+	xor %rdi, %rdi
+	syscall
 
 /*
  * read int from char array. Read each char while is digit char (in ascii)
